@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tinderbox · sound</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#05080f; --ice:#e9fbff; --cyan:#4fd0e0; --soft:#7fd3dd; --dim:#2e6f7b; --red:#ff6b6b; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; background:var(--bg); color:var(--ice); overflow:hidden; }
+  body { font-family:"Cormorant Garamond", Georgia, serif; }
+  #eyeWrap { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(72vh, 72vw); aspect-ratio:1; }
+  #eye { width:100%; height:100%; display:block; }
+
+  #poem { position:fixed; left:0; right:0; bottom:9vh; text-align:center; opacity:0; transition:opacity 1.2s ease; pointer-events:none; }
+  #poem.on { opacity:1; }
+  #poem .a, #poem .c { font-style:italic; font-size:3.2vh; color:var(--soft); }
+  #poem .b { font-weight:600; font-size:7vh; letter-spacing:0.12em; margin:0.6vh 0; }
+
+  #arm { position:fixed; inset:0; z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center;
+         gap:18px; background:rgba(5,8,15,0.86); cursor:pointer; text-align:center; padding:24px; }
+  #arm .t { font-weight:600; font-size:44px; letter-spacing:0.24em; }
+  #arm .s { font-style:italic; font-size:22px; color:var(--soft); }
+  #arm .m { font:13px/1.6 ui-monospace, Menlo, monospace; color:var(--dim); }
+
+  #lamp { position:fixed; right:10px; bottom:10px; width:6px; height:6px; border-radius:50%; background:var(--red); opacity:0.6; z-index:25; }
+  #lamp.ok { background:var(--cyan); opacity:0.35; }
+  #lamp.ready { background:var(--cyan); opacity:0.9; box-shadow:0 0 8px var(--cyan); }
+
+  #panel { position:fixed; top:12px; right:12px; bottom:12px; width:min(460px, 96vw); z-index:20; overflow:auto;
+           background:rgba(5,8,15,0.95); border:1px solid var(--dim); border-radius:10px; padding:16px;
+           font:13px/1.5 ui-monospace, Menlo, Consolas, monospace; display:none; }
+  #panel.on { display:block; }
+  #panel h2 { font:600 22px "Cormorant Garamond", serif; letter-spacing:0.18em; margin-bottom:8px; }
+  #panel .row { display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-bottom:1px solid rgba(46,111,123,0.3); }
+  #panel .row b { color:var(--cyan); font-weight:600; text-align:right; }
+  #panel .big { font-size:18px; }
+  #panel .sec { margin-top:14px; color:var(--soft); }
+  #panel button, #panel label.btn { font:12px ui-monospace, monospace; color:var(--ice); background:none; border:1px solid var(--dim);
+           border-radius:6px; padding:5px 9px; cursor:pointer; }
+  #panel button:hover, #panel label.btn:hover { border-color:var(--cyan); }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center; }
+  #grid { display:grid; grid-template-columns:auto repeat(6, 1fr); gap:3px; margin-top:8px; }
+  #grid .hd { color:var(--dim); text-align:center; font-size:11px; align-self:center; }
+  #grid button { padding:5px 2px; font-size:10px; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  #grid button.missing { border-style:dashed; color:#8aa; }
+  #grid button.ready { border-color:var(--cyan); background:rgba(79,208,224,0.15); }
+  #grid button.playing { background:var(--cyan); color:var(--bg); }
+  #log { margin-top:8px; max-height:120px; overflow:auto; color:#9bc; font-size:11px; white-space:pre-wrap; }
+  #drop { margin-top:8px; border:1px dashed var(--dim); border-radius:8px; padding:10px; text-align:center; color:var(--soft); }
+  #drop.over { border-color:var(--cyan); background:rgba(79,208,224,0.08); }
+  input[type=range] { accent-color:var(--cyan); width:140px; }
+  .hint { color:var(--dim); font-size:11px; margin-top:10px; }
+</style>
+</head>
+<body>
+  <div id="eyeWrap"><canvas id="eye"></canvas></div>
+  <div id="poem"><div class="a" id="pA"></div><div class="b" id="pB"></div><div class="c" id="pC"></div></div>
+  <div id="lamp" title="cyan = connected, bright = card ready, red = offline"></div>
+
+  <div id="arm">
+    <div class="t">TINDERBOX</div>
+    <div class="s">Click anywhere to arm the sound.</div>
+    <div class="m" id="armInfo">connecting…</div>
+  </div>
+
+  <div id="panel">
+    <h2>TINDERBOX · SOUND</h2>
+    <div class="row"><span>server</span><b id="sLink">…</b></div>
+    <div class="row"><span>phones in room</span><b id="sPhones">0</b></div>
+    <div class="row"><span>room</span><b id="sRoom"></b></div>
+    <div class="row"><span>sounds loaded</span><b id="sLoaded">0 / 36</b></div>
+    <div class="row big"><span>ready card</span><b id="sReady">–</b></div>
+    <div class="row"><span>last played</span><b id="sLast">–</b></div>
+
+    <div class="controls">
+      <button id="bStop">stop (space)</button>
+      <button id="bFull">fullscreen (f)</button>
+      <span>vol <input type="range" id="vol" min="0" max="1.5" step="0.01" value="1"></span>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="optSpeak" checked> speak the poem if a sound is missing</label>
+    </div>
+    <div class="controls">
+      <label><input type="checkbox" id="optPoem"> show the poem on screen while it plays (p)</label>
+    </div>
+
+    <div class="sec">Sound files</div>
+    <div id="drop">Drop audio files here, or <label class="btn">choose files<input type="file" id="files" multiple accept="audio/*" hidden></label><br>
+      <span class="hint">Names start with the card number: 01-waves.mp3 … 36-telephone.mp3</span></div>
+    <div class="hint" id="missing"></div>
+
+    <div class="sec">Manual backup (click a card to play it)</div>
+    <div id="grid"></div>
+
+    <div class="sec">Log</div>
+    <div id="log"></div>
+    <div class="hint">h hide this panel · f fullscreen · space stop · p poem on screen</div>
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/cards.js"></script>
+<script src="/eye.js"></script>
+<script>
+'use strict';
+/* =========================================================================
+   TINDERBOX · sound computer
+   Leave this page open on the computer connected to the speakers.
+   1. Click once to arm the sound (browsers need one click before audio can play).
+   2. The phone sends the chosen card while "Finding your word…" runs: it is decoded and held ready.
+   3. The final secret tap on the phone plays it at once.
+   Sounds come from the server's public/audio folder, or files dropped on this page
+   (local files stay on this computer and override the server's).
+   Press h for the operator panel.
+   ========================================================================= */
+const CARDS = window.TINDERBOX_CARDS;
+const params = new URLSearchParams(location.search);
+const ROOM = params.get("room") || "tinderbox";
+const $ = (id) => document.getElementById(id);
+const eye = makeEye($("eye"), { seed: 4242 });
+
+let ctx = null, master = null, analyser = null, current = null, armed = false;
+const buffers = new Map();        // n -> AudioBuffer
+const serverUrls = {};            // n -> url
+const pending = new Map();        // n -> Promise
+let ready = null, last = null, linkOk = false, phones = 0;
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  const el = $("log"); el.textContent = `${t}  ${msg}\n` + el.textContent;
+}
+const label = (c) => `${c.n}  ${c.a}·${c.b}  ${c.word.toUpperCase()}`;
+
+// ---- socket ----
+const socket = io({ transports: ["websocket", "polling"], reconnection: true, reconnectionDelay: 500 });
+socket.on("connect", () => socket.emit("join", { room: ROOM, role: "speaker" }));
+socket.on("disconnect", () => { linkOk = false; status(); log("server disconnected, reconnecting…"); });
+socket.on("joined", (s) => { linkOk = true; phones = s.phones; status(); log(`joined room "${s.room}"`); });
+socket.on("room-state", (s) => { phones = s.phones; status(); });
+socket.on("select", (sel) => {
+  const c = CARDS[sel.n - 1]; if (!c) return;
+  ready = c; status(); log(`ready  ${label(c)}`);
+  ensureLoaded(c.n);
+});
+socket.on("fire", (cue) => {
+  const c = CARDS[cue.n - 1]; if (!c) return;
+  log(`FIRE   ${label(c)}  (${Date.now() - cue.at} ms after the tap)`);
+  play(c.n);
+});
+socket.on("cancel", () => { ready = null; status(); log("phone restarted"); });
+
+// keep a sleeping free server awake while this page is open
+setInterval(() => fetch("/ping", { cache: "no-store" }).catch(() => {}), 4 * 60 * 1000);
+
+// ---- audio ----
+async function arm() {
+  if (armed) return;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  master = ctx.createGain(); master.gain.value = Number($("vol").value);
+  analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+  master.connect(analyser); analyser.connect(ctx.destination);
+  armed = true;
+  $("arm").style.display = "none";
+  log("sound armed");
+  meter();
+  keepAwake();
+  try {
+    const list = await (await fetch("/api/audio", { cache: "no-store" })).json();
+    Object.assign(serverUrls, list);
+    const ns = Object.keys(list).map(Number);
+    log(`${ns.length} sound files on the server`);
+    for (const n of ns) await ensureLoaded(n);   // one at a time keeps memory and network calm
+  } catch (e) { log("could not list server sounds"); }
+  status();
+}
+
+function ensureLoaded(n) {
+  if (buffers.has(n) || !ctx) return Promise.resolve();
+  if (pending.has(n)) return pending.get(n);
+  const url = serverUrls[n];
+  if (!url) return Promise.resolve();
+  const p = fetch(url).then((r) => r.arrayBuffer()).then((ab) => ctx.decodeAudioData(ab))
+    .then((buf) => { if (!buffers.has(n)) buffers.set(n, buf); status(); })
+    .catch(() => log(`could not decode ${url}`))
+    .finally(() => pending.delete(n));
+  pending.set(n, p);
+  return p;
+}
+
+async function addLocalFiles(fileList) {
+  if (!ctx) await arm();
+  let added = 0;
+  for (const f of fileList) {
+    const n = cardNumberFromName(f.name);
+    if (!n) { log(`skipped ${f.name} (no card number or word in the name)`); continue; }
+    try {
+      const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+      buffers.set(n, buf); added++;
+    } catch { log(`could not decode ${f.name}`); }
+  }
+  log(`${added} local file(s) loaded`);
+  status();
+}
+function cardNumberFromName(name) {
+  const m = name.match(/^0*(\d{1,2})(?!\d)/);
+  if (m && +m[1] >= 1 && +m[1] <= 36) return +m[1];
+  const low = name.toLowerCase();
+  const c = CARDS.find((c) => low.includes(c.word.toLowerCase()));
+  return c ? c.n : null;
+}
+
+function stop(fade = 0.25) {
+  if (current) {
+    const { src, gain } = current;
+    try { gain.gain.cancelScheduledValues(ctx.currentTime); gain.gain.setTargetAtTime(0, ctx.currentTime, fade / 3); src.stop(ctx.currentTime + fade); } catch {}
+    current = null;
+  }
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  $("poem").classList.remove("on");
+  markPlaying(null);
+}
+
+async function play(n) {
+  const c = CARDS[n - 1];
+  if (!armed) { log("NOT ARMED: click the screen once"); return; }
+  if (ctx.state !== "running") await ctx.resume();
+  stop(0.08);
+  last = c; status();
+  if ($("optPoem").checked) {
+    $("pA").textContent = c.above; $("pB").textContent = c.word.toUpperCase(); $("pC").textContent = c.below;
+    $("poem").classList.add("on");
+  }
+  markPlaying(n);
+  if (!buffers.has(n) && serverUrls[n]) await ensureLoaded(n);
+  const buf = buffers.get(n);
+  if (buf) {
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = buf; src.connect(gain); gain.connect(master);
+    src.start();
+    current = { src, gain, n };
+    src.onended = () => { if (current && current.src === src) { current = null; markPlaying(null); setTimeout(() => $("poem").classList.remove("on"), 1500); } };
+  } else if ($("optSpeak").checked && window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance(`${c.above} ... ${c.word} ... ${c.below}`);
+    u.rate = 0.75; u.pitch = 0.9; u.volume = Math.min(1, Number($("vol").value));
+    u.onend = () => { markPlaying(null); setTimeout(() => $("poem").classList.remove("on"), 1500); };
+    speechSynthesis.speak(u);
+    fakePulse(4000);
+    log(`no file for ${c.n}: spoke the poem instead`);
+  } else {
+    chime(); fakePulse(1500);
+    log(`no file for ${c.n}: played a chime`);
+  }
+}
+
+function chime() {
+  const t = ctx.currentTime;
+  [523.25, 783.99, 1046.5].forEach((f, i) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine"; o.frequency.value = f; o.connect(g); g.connect(master);
+    g.gain.setValueAtTime(0.0001, t + i * 0.12); g.gain.exponentialRampToValueAtTime(0.25, t + i * 0.12 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.12 + 1.6);
+    o.start(t + i * 0.12); o.stop(t + i * 0.12 + 1.7);
+  });
+}
+let pulseUntil = 0;
+function fakePulse(ms) { pulseUntil = performance.now() + ms; }
+function meter() {
+  const data = new Float32Array(analyser.fftSize);
+  const loop = (now) => {
+    analyser.getFloatTimeDomainData(data);
+    let s = 0; for (let i = 0; i < data.length; i++) s += data[i] * data[i];
+    let lvl = Math.min(1, Math.sqrt(s / data.length) * 5);
+    if (now < pulseUntil) lvl = Math.max(lvl, 0.35 + 0.25 * Math.sin(now / 160));
+    eye.setLevel(lvl);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+
+// ---- operator panel ----
+function buildGrid() {
+  const g = $("grid");
+  g.appendChild(Object.assign(document.createElement("div"), { className: "hd", textContent: "" }));
+  for (let b = 1; b <= 6; b++) g.appendChild(Object.assign(document.createElement("div"), { className: "hd", textContent: b }));
+  for (let a = 1; a <= 6; a++) {
+    g.appendChild(Object.assign(document.createElement("div"), { className: "hd", textContent: a }));
+    for (let b = 1; b <= 6; b++) {
+      const c = cardFromTaps(a, b);
+      const btn = document.createElement("button");
+      btn.textContent = c.word; btn.title = label(c); btn.id = "g" + c.n;
+      btn.addEventListener("click", () => { if (!armed) arm().then(() => play(c.n)); else play(c.n); });
+      g.appendChild(btn);
+    }
+  }
+}
+function markPlaying(n) {
+  document.querySelectorAll("#grid button.playing").forEach((b) => b.classList.remove("playing"));
+  if (n) $("g" + n).classList.add("playing");
+}
+function status() {
+  $("sLink").textContent = linkOk ? "connected" : "offline";
+  $("sPhones").textContent = phones;
+  $("sRoom").textContent = ROOM;
+  $("sLoaded").textContent = `${buffers.size} / 36`;
+  $("sReady").textContent = ready ? label(ready) : "–";
+  $("sLast").textContent = last ? label(last) : "–";
+  const miss = CARDS.filter((c) => !buffers.has(c.n)).map((c) => c.n);
+  $("missing").textContent = miss.length ? `missing: ${miss.join(", ")}` : "all 36 sounds loaded";
+  CARDS.forEach((c) => {
+    const b = $("g" + c.n); if (!b) return;
+    b.classList.toggle("missing", !buffers.has(c.n));
+    b.classList.toggle("ready", !!ready && ready.n === c.n);
+  });
+  $("lamp").className = !linkOk ? "" : ready ? "ready" : "ok";
+  $("armInfo").textContent = linkOk ? `connected · room "${ROOM}" · ${phones} phone(s)` : "connecting to server…";
+}
+
+$("arm").addEventListener("click", arm);
+$("bStop").addEventListener("click", () => stop());
+$("bFull").addEventListener("click", fullscreen);
+$("vol").addEventListener("input", (e) => { if (master) master.gain.value = Number(e.target.value); });
+$("files").addEventListener("change", (e) => addLocalFiles([...e.target.files]));
+const drop = $("drop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => addLocalFiles([...e.dataTransfer.files].filter((f) => /^audio\//.test(f.type) || /\.(mp3|wav|m4a|aac|ogg|flac|webm)$/i.test(f.name))));
+function fullscreen() { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else document.exitFullscreen(); }
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "checkbox") return;
+  if (e.key === "h") $("panel").classList.toggle("on");
+  else if (e.key === "f") fullscreen();
+  else if (e.key === " " || e.key === "Escape") { e.preventDefault(); stop(); }
+  else if (e.key === "p") { $("optPoem").checked = !$("optPoem").checked; }
+});
+
+let wakeLock = null;
+async function keepAwake() { try { if ("wakeLock" in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => (wakeLock = null)); } } catch {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && armed) keepAwake(); });
+
+buildGrid();
+status();
+</script>
+</body>
+</html>

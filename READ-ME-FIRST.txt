@@ -1,0 +1,30 @@
+TINDERBOX REVEAL - QUICK START (Windows)
+
+FIRST TIME
+1. Extract the ZIP. It creates a folder named tinderbox-reveal.
+2. Open PowerShell in that folder (Shift + right-click inside it > Open PowerShell window here).
+3. Run:  npm install
+4. Run:  npm start
+   The window says: Tinderbox reveal running on port 3000.
+
+REHEARSE ON ONE COMPUTER
+1. Open  http://localhost:3000/speaker?room=tinderbox   and click once to arm the sound.
+2. Open  http://localhost:3000/?room=tinderbox          in another window (this is the phone page).
+3. Press BEGIN, then use the number keys 1-6 for the two taps, then the space bar for the final tap.
+   (Press r on the phone page to see the grid.)
+
+ON THE REAL PHONE
+- Same Wi-Fi as the laptop: on the phone open  http://<laptop IP>:3000/?room=tinderbox
+  (find the laptop IP with:  ipconfig  -> "IPv4 Address"). You may need to allow Node.js through the firewall.
+- Anywhere with internet: deploy to Render as described in README.md, like the collaborative soundboard.
+- Tip: in the phone browser, "Add to Home Screen" makes the page open full screen with no address bar.
+
+SOUNDS
+Put the 36 files in  public\audio  named 01-waves.mp3 ... 36-telephone.mp3
+(the full list is in public\audio\README.txt), or drag them onto the sound page (press h).
+Missing sounds are spoken aloud instead, so you can rehearse straight away.
+
+BEFORE EVERY SHOW
+1. Open the sound page, click to arm, press f for full screen, check the volume.
+2. Open the phone page; the tiny dot at the very bottom should NOT be red.
+3. Do one full test card with the rehearse view (faint button bottom-right of the phone).
