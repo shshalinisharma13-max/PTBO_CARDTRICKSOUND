@@ -12,13 +12,18 @@
   * { box-sizing:border-box; margin:0; padding:0; }
   html, body { height:100%; background:var(--bg); color:var(--ice); overflow:hidden; }
   body { font-family:"Cormorant Garamond", Georgia, serif; }
-  #eyeWrap { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(72vh, 72vw); aspect-ratio:1; }
+  #eyeWrap { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); width:min(72vh, 72vw); aspect-ratio:1;
+             transition:top 1.2s ease, width 1.2s ease; }
+  body.poem-visible #eyeWrap { top:32%; width:min(50vh, 68vw); }
   #eye { width:100%; height:100%; display:block; }
 
-  #poem { position:fixed; left:0; right:0; bottom:9vh; text-align:center; opacity:0; transition:opacity 1.2s ease; pointer-events:none; }
+  #poem { position:fixed; left:0; right:0; bottom:8vh; padding:0 24px; text-align:center; opacity:0;
+          transition:opacity 1.2s ease; pointer-events:none; }
   #poem.on { opacity:1; }
-  #poem .a, #poem .c { font-style:italic; font-size:3.2vh; color:var(--soft); }
-  #poem .b { font-weight:600; font-size:7vh; letter-spacing:0.12em; margin:0.6vh 0; }
+  #poem .a, #poem .c { font-style:italic; font-size:clamp(16px, 3.2vh, 30px); line-height:1.25; color:var(--soft); }
+  #poem .b { font-weight:600; font-size:clamp(24px, min(7vh, 8vw), 76px); line-height:1.15;
+             letter-spacing:0.12em; margin:0.6vh 0; overflow-wrap:anywhere; }
+  @media (prefers-reduced-motion: reduce) { #eyeWrap, #poem { transition:none; } }
 
   #arm { position:fixed; inset:0; z-index:30; display:flex; flex-direction:column; align-items:center; justify-content:center;
          gap:18px; background:rgba(5,8,15,0.86); cursor:pointer; text-align:center; padding:24px; }
@@ -58,7 +63,7 @@
 </head>
 <body>
   <div id="eyeWrap"><canvas id="eye"></canvas></div>
-  <div id="poem"><div class="a" id="pA"></div><div class="b" id="pB"></div><div class="c" id="pC"></div></div>
+  <div id="poem" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true"><div class="a" id="pA"></div><div class="b" id="pB"></div><div class="c" id="pC"></div></div>
   <div id="lamp" title="cyan = connected, bright = card ready, red = offline"></div>
 
   <div id="arm">
@@ -85,7 +90,7 @@
       <label><input type="checkbox" id="optSpeak" checked> speak the poem if a sound is missing</label>
     </div>
     <div class="controls">
-      <label><input type="checkbox" id="optPoem"> show the poem on screen while it plays (p)</label>
+      <label><input type="checkbox" id="optPoem" checked> show the poem with the reveal (p)</label>
     </div>
 
     <div class="sec">Sound files</div>
@@ -127,6 +132,20 @@ const buffers = new Map();        // n -> AudioBuffer
 const serverUrls = {};            // n -> url
 const pending = new Map();        // n -> Promise
 let ready = null, last = null, linkOk = false, phones = 0;
+let revealedCard = null, playbackId = 0;
+
+// Keep the printed three-line poem visible until the next reveal, restart, or stop.
+function renderPoem() {
+  const visible = !!revealedCard && $("optPoem").checked;
+  if (visible) {
+    $("pA").textContent = revealedCard.above;
+    $("pB").textContent = revealedCard.word.toUpperCase();
+    $("pC").textContent = revealedCard.below;
+  }
+  $("poem").classList.toggle("on", visible);
+  $("poem").setAttribute("aria-hidden", String(!visible));
+  document.body.classList.toggle("poem-visible", visible);
+}
 
 function log(msg) {
   const t = new Date().toLocaleTimeString();
@@ -150,7 +169,7 @@ socket.on("fire", (cue) => {
   log(`FIRE   ${label(c)}  (${Date.now() - cue.at} ms after the tap)`);
   play(c.n);
 });
-socket.on("cancel", () => { ready = null; status(); log("phone restarted"); });
+socket.on("cancel", () => { stop(); ready = null; status(); log("phone restarted"); });
 
 // keep a sleeping free server awake while this page is open
 setInterval(() => fetch("/ping", { cache: "no-store" }).catch(() => {}), 4 * 60 * 1000);
@@ -214,39 +233,43 @@ function cardNumberFromName(name) {
 }
 
 function stop(fade = 0.25) {
+  playbackId++;
   if (current) {
     const { src, gain } = current;
     try { gain.gain.cancelScheduledValues(ctx.currentTime); gain.gain.setTargetAtTime(0, ctx.currentTime, fade / 3); src.stop(ctx.currentTime + fade); } catch {}
     current = null;
   }
   if (window.speechSynthesis) speechSynthesis.cancel();
-  $("poem").classList.remove("on");
+  revealedCard = null;
+  renderPoem();
   markPlaying(null);
 }
 
 async function play(n) {
   const c = CARDS[n - 1];
+  if (!c) return;
   if (!armed) { log("NOT ARMED: click the screen once"); return; }
-  if (ctx.state !== "running") await ctx.resume();
   stop(0.08);
+  const id = playbackId;
+  if (ctx.state !== "running") await ctx.resume();
+  if (id !== playbackId) return;
   last = c; status();
-  if ($("optPoem").checked) {
-    $("pA").textContent = c.above; $("pB").textContent = c.word.toUpperCase(); $("pC").textContent = c.below;
-    $("poem").classList.add("on");
-  }
-  markPlaying(n);
   if (!buffers.has(n) && serverUrls[n]) await ensureLoaded(n);
+  if (id !== playbackId) return;
+  revealedCard = c;
+  renderPoem();
+  markPlaying(n);
   const buf = buffers.get(n);
   if (buf) {
     const src = ctx.createBufferSource(), gain = ctx.createGain();
     src.buffer = buf; src.connect(gain); gain.connect(master);
     src.start();
     current = { src, gain, n };
-    src.onended = () => { if (current && current.src === src) { current = null; markPlaying(null); setTimeout(() => $("poem").classList.remove("on"), 1500); } };
+    src.onended = () => { if (current && current.src === src) { current = null; markPlaying(null); } };
   } else if ($("optSpeak").checked && window.speechSynthesis) {
     const u = new SpeechSynthesisUtterance(`${c.above} ... ${c.word} ... ${c.below}`);
     u.rate = 0.75; u.pitch = 0.9; u.volume = Math.min(1, Number($("vol").value));
-    u.onend = () => { markPlaying(null); setTimeout(() => $("poem").classList.remove("on"), 1500); };
+    u.onend = () => { if (id === playbackId) markPlaying(null); };
     speechSynthesis.speak(u);
     fakePulse(4000);
     log(`no file for ${c.n}: spoke the poem instead`);
@@ -323,6 +346,7 @@ $("arm").addEventListener("click", arm);
 $("bStop").addEventListener("click", () => stop());
 $("bFull").addEventListener("click", fullscreen);
 $("vol").addEventListener("input", (e) => { if (master) master.gain.value = Number(e.target.value); });
+$("optPoem").addEventListener("change", renderPoem);
 $("files").addEventListener("change", (e) => addLocalFiles([...e.target.files]));
 const drop = $("drop");
 ["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
@@ -334,7 +358,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "h") $("panel").classList.toggle("on");
   else if (e.key === "f") fullscreen();
   else if (e.key === " " || e.key === "Escape") { e.preventDefault(); stop(); }
-  else if (e.key === "p") { $("optPoem").checked = !$("optPoem").checked; }
+  else if (e.key === "p") { $("optPoem").checked = !$("optPoem").checked; renderPoem(); }
 });
 
 let wakeLock = null;

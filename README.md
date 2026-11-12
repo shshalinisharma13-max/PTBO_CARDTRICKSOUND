@@ -41,7 +41,10 @@ on "Close your eyes" so you can tap again). Android phones also buzz; iPhones do
 ## The sound computer
 
 Open `/speaker?room=tinderbox`, click once to **arm the sound**, then press **f** for full screen.
-The screen shows only the eye, which glows with the sound. Press **h** for the operator panel:
+The eye glows with the sound. On the final secret tap, the chosen card's three-line poem fades in
+below the eye, matching the printed card. It stays visible after the sound ends, until you start
+over, press stop, or reveal another card. Selecting a card early does not display the poem.
+Press **h** for the operator panel:
 connection status, which card is ready, sounds loaded, volume, stop, and a **manual backup grid**
 of all 36 cards you can click if the phone ever fails.
 
@@ -49,7 +52,7 @@ Sounds: put files in `public/audio/` named by card number (`01-waves.mp3` … `3
 see `public/audio/README.txt`), or drag them onto the operator panel. A card without a file speaks
 its poem aloud instead, so you can rehearse before every sound exists.
 
-Options in the panel: show the poem on screen while it plays (**p**), speak the poem when a file is missing.
+Options in the panel: show or hide the poem (**p**, on by default), speak the poem when a file is missing.
 
 ## Run locally
 
