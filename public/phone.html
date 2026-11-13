@@ -32,6 +32,8 @@
   .head { font-weight:600; font-size:clamp(30px, 9vw, 46px); line-height:1.08; letter-spacing:0.02em; }
   .title { font-weight:600; font-size:clamp(34px, 11vw, 54px); letter-spacing:0.22em; text-transform:uppercase; }
   .sub { font-style:italic; font-size:clamp(18px, 5vw, 23px); color:var(--soft); }
+  #s-done { gap:8px; }
+  #doneHead { font-size:clamp(30px, 9vw, 52px); letter-spacing:0.12em; overflow-wrap:anywhere; max-width:100%; }
   .rule { width:120px; height:1px; background:var(--dim); position:relative; margin:4px 0; }
   .rule::after { content:""; position:absolute; left:50%; top:50%; width:7px; height:7px; background:var(--cyan);
                  transform:translate(-50%,-50%) rotate(45deg); }
@@ -99,7 +101,7 @@
     <div class="head" id="readyHead">Close your eyes,<br>and listen.</div>
   </section>
 
-  <section class="stage hidden" id="s-done">
+  <section class="stage hidden" id="s-done" role="status" aria-live="polite" aria-atomic="true">
     <div class="kicker" id="doneKicker"></div>
     <div class="head" id="doneHead"></div>
     <div class="sub" id="doneSub"></div>
@@ -151,7 +153,7 @@ const QUESTIONS = [
 ];
 const LISTEN_MS = 3200;          // length of the "Finding your word…" bar
 const SETTLE_MS = 900;           // pause after the last tap before a question is taken
-const SHOW_WORD_AFTER = false;   // true: the phone shows the poem after the sound plays
+const SHOW_WORD_AFTER = true;    // reveal the printed poem once the sound computer accepts the final tap
 
 // ---- setup ----
 const params = new URLSearchParams(location.search);
@@ -163,6 +165,16 @@ const eye = makeEye($("eye"), { seed: 1777 });
 
 let stage = "intro", q = 0, taps = [null, null], settle = null, fired = false;
 let linkOk = false, speakers = 0;
+let runId = 0, listenTimer = null, revealTimer = null;
+
+function clearReveal() {
+  clearTimeout(settle);
+  clearInterval(listenTimer);
+  clearInterval(revealTimer);
+  $("doneKicker").textContent = "";
+  $("doneHead").textContent = "";
+  $("doneSub").textContent = "";
+}
 
 function show(name) {
   stage = name;
@@ -194,6 +206,8 @@ function warn() {
 
 // ---- flow ----
 function begin() {
+  runId++;
+  clearReveal();
   taps = [null, null]; fired = false; q = 0;
   askQuestion(0);
   keepAwake();
@@ -215,25 +229,29 @@ function onZone(z) {
   }
 }
 function listen() {
+  const run = runId;
   show("listening");
   const [a, b] = taps;
   socket.timeout(4000).emit("select", { a, b }, (err, res) => {
+    if (run !== runId) return;
     if (err || !res || !res.ok || !res.speakers) warn();
   });
   const fill = $("procFill"); fill.style.width = "0%";
   const t0 = performance.now();
-  const iv = setInterval(() => {
+  listenTimer = setInterval(() => {
     const p = Math.min(1, (performance.now() - t0) / LISTEN_MS);
     fill.style.width = (p * 100).toFixed(1) + "%";
     eye.setOpen(p);
-    if (p >= 1) { clearInterval(iv); show("ready"); }
+    if (p >= 1) { clearInterval(listenTimer); show("ready"); }
   }, 60);
 }
 function fire() {
   if (fired) return;
+  const run = runId;
   fired = true; flash();
   const [a, b] = taps;
   socket.timeout(3000).emit("fire", { a, b }, (err, res) => {
+    if (run !== runId) return;
     if (err || !res || !res.ok) { fired = false; warn(); return; }   // not delivered: tap again
     afterFire();
   });
@@ -246,10 +264,11 @@ function afterFire() {
   show("done");
   eye.setOpen(0);
   let k = 0;
-  const iv = setInterval(() => { k++; eye.setLevel(0.5 + 0.5 * Math.sin(k / 5)); if (k > 90) { clearInterval(iv); eye.setLevel(0); } }, 50);
+  revealTimer = setInterval(() => { k++; eye.setLevel(0.5 + 0.5 * Math.sin(k / 5)); if (k > 90) { clearInterval(revealTimer); eye.setLevel(0); } }, 50);
 }
 function restart() {
-  clearTimeout(settle);
+  runId++;
+  clearReveal();
   taps = [null, null]; fired = false;
   socket.emit("cancel");
   eye.setOpen(0.5); eye.setLevel(0);

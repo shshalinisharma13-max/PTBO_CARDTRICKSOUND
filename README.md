@@ -19,6 +19,8 @@ Built the same way as the collaborative soundboard: Node + Express + Socket.IO, 
    Changed your mind? Tap again within about a second; the last tap counts.
 5. The phone shows *"Finding your word…"* and the sound computer quietly gets that card ready.
 6. *"Close your eyes, and listen."* **Tap anywhere: that is the final secret button.** The sound plays.
+   Once the sound computer accepts that tap, the phone also shows the card's three-line poem.
+   It stays visible until you start over with a two-finger tap.
 
 ```
  phone screen        card back sprig
