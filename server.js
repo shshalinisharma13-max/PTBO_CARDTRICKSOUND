@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
+import { cardFromPile } from "./public/cards.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, "public");
@@ -44,7 +45,7 @@ app.get("/api/audio", (_q, r) => {
   r.json(out);
 });
 
-const lastSelection = new Map();   // room -> { n, a, b, at }
+const lastSelection = new Map();   // room -> { n, pile, a, b, at }
 
 function cleanRoom(value) {
   const room = String(value || "tinderbox").trim().toLowerCase().replace(/[^a-z0-9-_]/g, "").slice(0, 30);
@@ -74,9 +75,9 @@ function broadcastState(room) {
 }
 
 function validCard(p) {
-  const a = Number(p?.a), b = Number(p?.b);
-  if (!(a >= 1 && a <= 6 && b >= 1 && b <= 6 && Number.isInteger(a) && Number.isInteger(b))) return null;
-  return { a, b, n: 6 * (a - 1) + b };
+  const pile = Number(p?.pile), a = Number(p?.a), b = Number(p?.b);
+  const card = cardFromPile(pile, a, b);
+  return card ? { pile, a, b, n: card.n } : null;
 }
 
 io.on("connection", (socket) => {
@@ -96,7 +97,7 @@ io.on("connection", (socket) => {
     broadcastState(room);
   });
 
-  // Phone: the two taps are settled; tell the sound computer which card to get ready.
+  // Phone: the place and two leaf taps are settled; prepare that pile's card.
   socket.on("select", (payload, ack = () => {}) => {
     const room = socket.data.room;
     const card = validCard(payload);
@@ -110,9 +111,9 @@ io.on("connection", (socket) => {
   // Phone: the final secret tap. Plays the card on every sound computer in the room.
   socket.on("fire", (payload, ack = () => {}) => {
     const room = socket.data.room;
-    const card = validCard(payload) || (room && lastSelection.get(room));
+    const card = validCard(payload);
     if (!room || socket.data.role !== "phone" || !card) return ack({ ok: false, reason: "invalid" });
-    const cue = { a: card.a, b: card.b, n: card.n, at: Date.now() };
+    const cue = { ...card, at: Date.now() };
     const sp = speakers(room);
     sp.forEach((s) => s.emit("fire", cue));
     ack({ ok: sp.length > 0, speakers: sp.length, n: card.n, reason: sp.length ? undefined : "no-speaker" });
@@ -133,7 +134,8 @@ io.on("connection", (socket) => {
 });
 
 httpServer.listen(PORT, "0.0.0.0", () => {
-  console.log(`Tinderbox reveal running on port ${PORT}`);
-  console.log(`  phone:   http://localhost:${PORT}/?room=tinderbox`);
-  console.log(`  speaker: http://localhost:${PORT}/speaker?room=tinderbox`);
+  const port = httpServer.address().port;
+  console.log(`Tinderbox reveal running on port ${port}`);
+  console.log(`  phone:   http://localhost:${port}/?room=tinderbox`);
+  console.log(`  speaker: http://localhost:${port}/speaker?room=tinderbox`);
 });

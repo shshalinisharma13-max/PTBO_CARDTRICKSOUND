@@ -48,8 +48,9 @@
            border-radius:6px; padding:5px 9px; cursor:pointer; }
   #panel button:hover, #panel label.btn:hover { border-color:var(--cyan); }
   .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center; }
-  #grid { display:grid; grid-template-columns:auto repeat(6, 1fr); gap:3px; margin-top:8px; }
-  #grid .hd { color:var(--dim); text-align:center; font-size:11px; align-self:center; }
+  #grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:4px; margin-top:8px; }
+  #grid .pile-heading { grid-column:1 / -1; color:var(--soft); margin-top:8px; }
+  #grid .back-code { display:block; font-size:10px; opacity:.75; }
   #grid button { padding:5px 2px; font-size:10px; text-align:center; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
   #grid button.missing { border-style:dashed; color:#8aa; }
   #grid button.ready { border-color:var(--cyan); background:rgba(79,208,224,0.15); }
@@ -107,9 +108,9 @@
   </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/cards.js"></script>
 <script src="/eye.js"></script>
-<script>
+<script type="module">
+import { CARDS, PILES, pileForCard, printedCodeForCard } from "/cards.js";
 'use strict';
 /* =========================================================================
    TINDERBOX · sound computer
@@ -121,7 +122,6 @@
    (local files stay on this computer and override the server's).
    Press h for the operator panel.
    ========================================================================= */
-const CARDS = window.TINDERBOX_CARDS;
 const params = new URLSearchParams(location.search);
 const ROOM = params.get("room") || "tinderbox";
 const $ = (id) => document.getElementById(id);
@@ -151,7 +151,7 @@ function log(msg) {
   const t = new Date().toLocaleTimeString();
   const el = $("log"); el.textContent = `${t}  ${msg}\n` + el.textContent;
 }
-const label = (c) => `${c.n}  ${c.a}·${c.b}  ${c.word.toUpperCase()}`;
+const label = (c) => `Place ${pileForCard(c)} · ${printedCodeForCard(c).join("·")} · ${c.word.toUpperCase()}`;
 
 // ---- socket ----
 const socket = io({ transports: ["websocket", "polling"], reconnection: true, reconnectionDelay: 500 });
@@ -307,14 +307,12 @@ function meter() {
 // ---- operator panel ----
 function buildGrid() {
   const g = $("grid");
-  g.appendChild(Object.assign(document.createElement("div"), { className: "hd", textContent: "" }));
-  for (let b = 1; b <= 6; b++) g.appendChild(Object.assign(document.createElement("div"), { className: "hd", textContent: b }));
-  for (let a = 1; a <= 6; a++) {
-    g.appendChild(Object.assign(document.createElement("div"), { className: "hd", textContent: a }));
-    for (let b = 1; b <= 6; b++) {
-      const c = cardFromTaps(a, b);
+  for (const pile of PILES) {
+    g.appendChild(Object.assign(document.createElement("div"), { className: "pile-heading", textContent: `${pile.name} · pile ${pile.number}` }));
+    for (const c of pile.cards) {
       const btn = document.createElement("button");
       btn.textContent = c.word; btn.title = label(c); btn.id = "g" + c.n;
+      btn.appendChild(Object.assign(document.createElement("span"), { className: "back-code", textContent: printedCodeForCard(c).join(" · ") }));
       btn.addEventListener("click", () => { if (!armed) arm().then(() => play(c.n)); else play(c.n); });
       g.appendChild(btn);
     }

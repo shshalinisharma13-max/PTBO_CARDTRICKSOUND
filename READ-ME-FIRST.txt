@@ -10,7 +10,8 @@ FIRST TIME
 REHEARSE ON ONE COMPUTER
 1. Open  http://localhost:3000/speaker?room=tinderbox   and click once to arm the sound.
 2. Open  http://localhost:3000/?room=tinderbox          in another window (this is the phone page).
-3. Press BEGIN, then use the number keys 1-6 for the two taps, then the space bar for the final tap.
+3. Press BEGIN. Use 1-4 to choose the place, then 1-6 for the left leaf and 1-6 for the right leaf.
+   Pause about a second after each answer. Press the space bar for the final reveal.
    (Press r on the phone page to see the grid.)
 
 ON THE REAL PHONE
@@ -25,6 +26,7 @@ Put the 36 files in  public\audio  named 01-waves.mp3 ... 36-telephone.mp3
 Missing sounds are spoken aloud instead, so you can rehearse straight away.
 
 BEFORE EVERY SHOW
-1. Open the sound page, click to arm, press f for full screen, check the volume.
-2. Open the phone page; the tiny dot at the very bottom should NOT be red.
-3. Do one full test card with the rehearse view (faint button bottom-right of the phone).
+1. Arrange the four nine-card piles exactly as listed in README.md, one at each place in the room.
+2. Open the sound page, click to arm, press f for full screen, check the volume.
+3. Open the phone page; the tiny dot at the very bottom should NOT be red.
+4. Do one full test card with the rehearse view (faint button bottom-right of the phone).

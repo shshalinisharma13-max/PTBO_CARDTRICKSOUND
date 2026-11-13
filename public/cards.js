@@ -1,6 +1,6 @@
-// The 36 Tinderbox cards. Card n has code (a, b): a = upper-left sprig, b = upper-right sprig.
-// n = 6 * (a - 1) + b. Order matches the printed deck.
-window.TINDERBOX_CARDS = [
+// Stable card numbers match the audio filenames. The a/b fields record the original
+// PDF codes; the four-pile routine uses the observed printed backs below instead.
+export const CARDS = [
  {
   "n": 1,
   "a": 1,
@@ -326,4 +326,31 @@ window.TINDERBOX_CARDS = [
   "sound": "old telephone ring"
  }
 ];
-window.cardFromTaps = (a, b) => window.TINDERBOX_CARDS[6 * (a - 1) + (b - 1)];
+
+// One nine-card print layout repeats in each pile. Read left sprig, then right.
+export const PRINTED_CODES = Object.freeze([
+  [3, 6], [3, 5], [3, 4],
+  [3, 3], [3, 2], [3, 1],
+  [2, 6], [2, 5], [2, 4],
+].map(Object.freeze));
+
+export const PILES = Object.freeze(Array.from({ length: 4 }, (_, i) => Object.freeze({
+  number: i + 1,
+  name: `Place ${i + 1}`,
+  cards: Object.freeze(CARDS.slice(i * 9, i * 9 + 9)),
+})));
+
+export function cardFromPile(pile, a, b) {
+  if (!Number.isInteger(pile) || pile < 1 || pile > 4) return null;
+  if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
+  const slot = PRINTED_CODES.findIndex(([left, right]) => left === a && right === b);
+  return slot < 0 ? null : CARDS[(pile - 1) * 9 + slot];
+}
+
+export function pileForCard(card) {
+  return Math.floor((card.n - 1) / 9) + 1;
+}
+
+export function printedCodeForCard(card) {
+  return PRINTED_CODES[(card.n - 1) % 9];
+}

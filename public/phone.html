@@ -50,6 +50,8 @@
   /* invisible 2 x 3 operator grid, same layout as the leaves: 1 2 / 3 4 / 5 6 */
   #pad { position:fixed; inset:0; z-index:20; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr 1fr; }
   #pad.locked { pointer-events:none; }
+  #pad.pile { grid-template-rows:1fr 1fr; }
+  #pad.pile .z:nth-child(n+5) { display:none; }
   #pad .z { position:relative; }
   body.rehearse #pad .z { outline:1px dashed rgba(79,208,224,0.35); outline-offset:-1px; }
   body.rehearse #pad .z::after { content:attr(data-z); position:absolute; inset:0; display:grid; place-items:center;
@@ -70,6 +72,14 @@
   #hud b { color:var(--cyan); font-weight:600; }
   #hud button { margin-top:6px; font:12px ui-monospace, monospace; color:var(--ice); background:none;
                 border:1px solid var(--dim); border-radius:6px; padding:4px 8px; }
+  @media (orientation:landscape) and (max-height:600px) {
+    #eyeWrap { left:24%; top:50%; transform:translate(-50%,-50%); width:min(38vw,65vh,300px); }
+    .stage { left:43%; right:3%; top:10vh; bottom:10vh; padding:0 16px; gap:10px; justify-content:center; }
+    .kicker, .sub { font-size:clamp(18px,3vw,22px); }
+    .head { font-size:clamp(26px,5vw,40px); }
+    .title { font-size:clamp(28px,5vw,44px); }
+    #doneHead { font-size:clamp(26px,5vw,42px); }
+  }
 </style>
 </head>
 <body>
@@ -87,7 +97,7 @@
     <div class="kicker" id="qKicker">The first question</div>
     <div class="head" id="qHead"></div>
     <div class="sub" id="qSub"></div>
-    <div class="steps"><i id="st1"></i><i id="st2"></i></div>
+    <div class="steps"><i id="st1"></i><i id="st2"></i><i id="st3"></i></div>
   </section>
 
   <section class="stage hidden" id="s-listening">
@@ -118,26 +128,29 @@
   <div id="hud">
     <div>link <b id="hLink">…</b></div>
     <div>stage <b id="hStage">intro</b></div>
+    <div>place <b id="hPile">–</b></div>
     <div>taps <b id="hTaps">– · –</b></div>
     <div>card <b id="hCard">–</b></div>
     <button id="hAgain">again</button>
   </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/cards.js"></script>
 <script src="/eye.js"></script>
-<script>
+<script type="module">
+import { CARDS, cardFromPile } from "/cards.js";
 'use strict';
 /* =========================================================================
    TINDERBOX · phone (performer's secret input)
 
    Read the card back: upper-left sprig = first number, upper-right = second.
-   The screen is an invisible 2 x 3 grid, laid out exactly like the leaves:
+   First choose the place using a 2 x 2 grid. The next two questions use an
+   invisible 2 x 3 grid, laid out exactly like the leaves:
         1 | 2
         3 | 4
         5 | 6
-   QUESTION 1  tap the first number   (re-tap to change; settles after a pause)
-   QUESTION 2  tap the second number  (same)
+   QUESTION 1  tap the place (four quadrants: 1 2 / 3 4)
+   QUESTION 2  tap the left leaf number (six zones; re-tap to change)
+   QUESTION 3  tap the right leaf number (same)
    LISTENING   the sound computer is told which card to get ready
    READY       tap anywhere = the final secret button: the sound plays
 
@@ -148,8 +161,9 @@
 
 // ---- words on screen: edit freely ----
 const QUESTIONS = [
-  { kicker: "The first question", head: "What colour<br>is your word?", sub: "Say it out loud." },
-  { kicker: "The second question", head: "Is it warm,<br>or cold?",      sub: "Take your time." },
+  { kicker: "The place", head: "Where did your<br>word find you?", sub: "Hold that place in mind." },
+  { kicker: "The colour", head: "What colour<br>is your word?", sub: "Say it out loud." },
+  { kicker: "The feeling", head: "Is it warm,<br>or cold?", sub: "Take your time." },
 ];
 const LISTEN_MS = 3200;          // length of the "Finding your word…" bar
 const SETTLE_MS = 900;           // pause after the last tap before a question is taken
@@ -163,7 +177,7 @@ const stages = ["intro", "question", "listening", "ready", "done"].reduce((o, k)
 const pad = $("pad"), dot = $("dot");
 const eye = makeEye($("eye"), { seed: 1777 });
 
-let stage = "intro", q = 0, taps = [null, null], settle = null, fired = false;
+let stage = "intro", q = 0, pile = null, taps = [null, null], settle = null, fired = false;
 let linkOk = false, speakers = 0;
 let runId = 0, listenTimer = null, revealTimer = null;
 
@@ -181,6 +195,7 @@ function show(name) {
   Object.values(stages).forEach((s) => s.classList.add("hidden"));
   stages[name].classList.remove("hidden");
   pad.classList.toggle("locked", !(name === "question" || name === "ready"));
+  pad.classList.toggle("pile", name === "question" && q === 0);
   hud();
 }
 
@@ -208,7 +223,7 @@ function warn() {
 function begin() {
   runId++;
   clearReveal();
-  taps = [null, null]; fired = false; q = 0;
+  pile = null; taps = [null, null]; fired = false; q = 0;
   askQuestion(0);
   keepAwake();
 }
@@ -216,23 +231,32 @@ function askQuestion(i) {
   q = i;
   const Q = QUESTIONS[i];
   $("qKicker").textContent = Q.kicker; $("qHead").innerHTML = Q.head; $("qSub").textContent = Q.sub;
-  $("st1").classList.toggle("on", i >= 0); $("st2").classList.toggle("on", i >= 1);
+  ["st1", "st2", "st3"].forEach((id, step) => $(id).classList.toggle("on", i >= step));
   show("question");
 }
 function onZone(z) {
   if (stage === "question") {
-    taps[q] = z; flash(); hud();
+    if (!Number.isInteger(z) || z < 1 || z > (q === 0 ? 4 : 6)) return;
+    if (q === 0) pile = z;
+    else taps[q - 1] = z;
+    flash(); hud();
     clearTimeout(settle);
-    settle = setTimeout(() => (q === 0 ? askQuestion(1) : listen()), SETTLE_MS);
+    settle = setTimeout(() => (q < QUESTIONS.length - 1 ? askQuestion(q + 1) : listen()), SETTLE_MS);
   } else if (stage === "ready") {
     fire();
   }
 }
 function listen() {
   const run = runId;
-  show("listening");
   const [a, b] = taps;
-  socket.timeout(4000).emit("select", { a, b }, (err, res) => {
+  if (!cardFromPile(pile, a, b)) {
+    taps = [null, null];
+    askQuestion(1);
+    warn();
+    return;
+  }
+  show("listening");
+  socket.timeout(4000).emit("select", { pile, a, b }, (err, res) => {
     if (run !== runId) return;
     if (err || !res || !res.ok || !res.speakers) warn();
   });
@@ -250,14 +274,15 @@ function fire() {
   const run = runId;
   fired = true; flash();
   const [a, b] = taps;
-  socket.timeout(3000).emit("fire", { a, b }, (err, res) => {
+  socket.timeout(3000).emit("fire", { pile, a, b }, (err, res) => {
     if (run !== runId) return;
     if (err || !res || !res.ok) { fired = false; warn(); return; }   // not delivered: tap again
-    afterFire();
+    afterFire(res.n);
   });
 }
-function afterFire() {
-  const card = cardFromTaps(taps[0], taps[1]);
+function afterFire(n) {
+  const card = CARDS[n - 1];
+  if (!card) { fired = false; warn(); return; }
   $("doneKicker").textContent = SHOW_WORD_AFTER ? card.above : "";
   $("doneHead").textContent = SHOW_WORD_AFTER ? card.word.toUpperCase() : "";
   $("doneSub").textContent = SHOW_WORD_AFTER ? card.below : "";
@@ -269,7 +294,7 @@ function afterFire() {
 function restart() {
   runId++;
   clearReveal();
-  taps = [null, null]; fired = false;
+  pile = null; taps = [null, null]; fired = false;
   socket.emit("cancel");
   eye.setOpen(0.5); eye.setLevel(0);
   show("intro");
@@ -292,8 +317,9 @@ $("btnBegin").addEventListener("click", begin);
 function hud() {
   $("hLink").textContent = !linkOk ? "offline" : speakers ? `ok · ${speakers} speaker` : "no sound computer";
   $("hStage").textContent = stage;
+  $("hPile").textContent = pile ? `Place ${pile}` : "–";
   $("hTaps").textContent = `${taps[0] ?? "–"} · ${taps[1] ?? "–"}`;
-  const c = taps[0] && taps[1] ? cardFromTaps(taps[0], taps[1]) : null;
+  const c = cardFromPile(pile, taps[0], taps[1]);
   $("hCard").textContent = c ? `${c.n} ${c.word.toUpperCase()}` : "–";
 }
 $("hudBtn").addEventListener("click", () => document.body.classList.toggle("rehearse"));
